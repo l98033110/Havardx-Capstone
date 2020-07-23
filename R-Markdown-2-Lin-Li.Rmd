@@ -1,0 +1,255 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+
+--
+title: "Income Prediction"
+author: "Lin Li"
+date: "July 21, 2020"
+---
+
+```{r, Global Settings, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+```
+
+```{r, Load the Libraries}
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("psych", repos = "http://cran.us.r-project.org")
+if(!require(dplyr)) install.packages("dplyr", repos = "http://cran.us.r-project.org")
+library(tidyverse)
+library(caret)
+library(lubridate)
+library(data.table)
+library(ggplot2)
+library(psych)
+library(dplyr)
+```
+
+
+# Introduction
+
+In this report, the **Adult** was used to create a **Income Prediction Algorithm** that can be used to predict whether a person makes over $50K a year.
+
+The **Adult dataset** consists of 32561 observations with 15 variables. 
+
+The data was pulled directly from the kaggle website (https://www.kaggle.com/uciml/adult-census-income). The data can't be automatically downloaded unless a registration with the website is finished. Thus, the dataset will be uploaded with this report.
+
+The raw dataset was explored, cleaned up, wrangled to become a more useable subset and then split into trainset dataset and the testset dataset.
+
+Accuracy is the target parameter to improve.
+
+Two models were trained using trainset and evaluated on testset. More effective model is **Random Forest**.
+
+Using this method, an **Accuracy** of **0.83** was obtained. In the last part of report, codes for tuning of rain forest model are provided but not run due to very slow response from my laptop. Some of parameters in codes can be adjusted accordingly based on results. I believe that a higher accuracy can definitely be achieved after further tuning.
+
+# Data Analysis
+
+## Read Data
+The raw datasets were pulled directly from the kaggle website and saved to a file called income_data.
+```{r,Adult Census Income from kaggle Website. Downloaded data called adult.csv will be submitted}
+income_data <- read.csv('adult.csv') # read provided dataset.
+```
+
+##### _Adult_ Dataset
+
+```{r, Display the Dataset}
+head(income_data)
+```
+## Data Preprocessing
+All duplicated obeservations are removed. Column fnlwgt stands for final weight which is not useful in prediction and is removed. capital gain and loss columns are removed and combined into one column (capital_net) using the formula gain - loss. All observations with ? input are removed and income_num column is added with inputs according to values in income column (1 for ">50K", 0 for "<50K"). All character columns are converted to factor.
+
+```{r, clean the Dataset}
+income_data <- distinct(income_data) # remove duplicate rows
+income_data <- income_data %>% select(-fnlwgt) # fnlwgt stands for final weight which is not useful in prediction. Remove it.
+income_data <- income_data %>% mutate(capital_net=capital.gain-capital.loss)%>%select(-capital.gain,-capital.loss)#combinte capital gain and loss columns into one column (capital_net) and remove gain and loss columns.
+income_data %>% group_by(income) %>% tally() # check how many groups in income column, classification problem
+#remove all rows with ?, add income_num column to 0/1 values based on income column, convert character to factor
+income_data <- income_data %>% filter_all(all_vars(. !='?')) %>% mutate(income_num = ifelse(income == ">50K", 1, 0)) %>% mutate_if(is.character, as.factor)
+```
+Above table shows number of observations for each income level. There are only two income levels.
+
+### Processed Dataset
+```{r, Processed Dataset}
+head(income_data)
+```
+
+## Explore/Visualize/Clean Categorical Data
+
+### Education
+
+In below tables, n is number of observations and means of each education level are calculated using new added column income_num (1 for ">50K", 0 for "<50K"). Higher education level may result in a higher possibility of well-paid employment.And education and education.num are the duplicate information for prediction. Thus education column is removed.
+
+```{r, Education}
+income_data %>% group_by(education) %>% summarize(mean = mean(income_num),n = n()) %>%arrange(desc(mean))
+income_data %>% group_by(education.num) %>% summarize(mean = mean(income_num),n = n()) %>%arrange(desc(mean))
+income_data <- income_data %>% select(-income_num) # remove income_num because income column is providing the same information
+income_data <- income_data %>% select(-education) # remove education column
+```
+
+### Age
+Below figures indicate that older people have higher possibility of higher income. 
+```{r, Age}
+age_hist <- income_data %>% ggplot(aes(x = age)) + geom_histogram(bins = 25, fill = "red") + 
+labs(x = "Age", y= "Observations", title = "Age Histogram")
+print(age_hist)
+age_income_density <- ggplot(income_data, aes(x = age, fill = income)) +
+geom_density(alpha = 0.2) + labs(x = "Age",y = "Density",title = "Age Density Plot by Income Level")
+print (age_income_density)
+```
+
+
+
+
+
+### Work Class
+```{r, Work Class}
+workclass_income_proportion <- ggplot(income_data, aes(x = workclass, fill = income)) +
+  geom_bar(alpha = 0.2) + labs(x = "Workclass",y = "Observations",title = "Proportions of >50K in different work classes")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+print (workclass_income_proportion)
+```
+
+The private sector has the most people who earn more than 50K per year and has the largest number of population. However, in terms of the proportion, the self-employed people are the winner. 
+
+### Marital Status
+```{r, Marital Status}
+marital_income_proportion <- ggplot(income_data, aes(x = marital.status, fill = income)) +
+  geom_bar(alpha = 0.2) + labs(x = "Marital Status",y = "Observations",title = "Proportions of >50K in different marital statuses")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+print (marital_income_proportion)
+```
+
+The figure indicates that married status has the most people who earn more than 50K per year and has the largest number of population.
+
+### Relationship
+```{r, Relationship}
+relationship_income_proportion <- ggplot(income_data, aes(x = relationship, fill = income)) +
+  geom_bar(alpha = 0.2) + labs(x = "Relationship",y = "Observations",title = "Proportions of >50K in different relationships")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+print (relationship_income_proportion)
+income_data <- income_data %>% select(-relationship)
+```
+
+Husband and wife only contribute marital status and gender information which are indicated by sex and marital status columns. The figure indicates that husband and wife have higher proportions of observations who earn more than 50K per year which is already reflected in Marital Status. According to graphs, marital status and relationship tell us the same thing. So relationship column is removed from the model.
+
+### Race
+```{r, Race}
+race_income_proportion <- ggplot(income_data, aes(x = race, fill = income)) +
+  geom_bar(alpha = 0.2) + labs(x = "Race",y = "Observations",title = "Proportions of >50K in different races")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+print (race_income_proportion)
+```
+
+White has the highest proportion of observations who earn more than 50K per year.
+
+### Sex
+```{r, Sex}
+sex_income_proportion <- ggplot(income_data, aes(x = sex, fill = income)) +
+  geom_bar(alpha = 0.2) + labs(x = "Sex",y = "Observations",title = "Proportions of >50K in different races")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+print (sex_income_proportion)
+```
+
+According to the graph, male employees have higher proportion of observations who earn more than 50K per year.
+
+### Occupation
+```{r, Occupation}
+occupation_income_proportion <- ggplot(income_data, aes(x = occupation, fill = income)) +
+  geom_bar(alpha = 0.2) + labs(x = "Occupation",y = "Observations",title = "Proportions of >50K in different races")+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+print (occupation_income_proportion)
+```
+
+According to the graph, Exec-managerial and Prof-specialty have highest proportion of observations who earn more than 50K per year. Blue collar such as Handers-cleaners and sales make less salaries.
+
+### Capital_net
+```{r, Capital_net}
+capital_hist <- income_data %>% ggplot(aes(x = capital_net)) + geom_histogram(bins = 25, fill = "red") + 
+  labs(x = "Capital_net", y= "Frequency", title = "capital Histogram")
+print(capital_hist)
+capital_income_density <- ggplot(income_data, aes(x = capital_net, fill = income)) +
+  geom_density(alpha = 0.2) + labs(x = "Capital_net",y = "Density",title = "Capital_net Density Plot by Income Level") + xlim(-10000,25000)
+print (capital_income_density)
+income_data <-income_data%>% select(-capital_net)#remove capital_net column
+```
+
+Capital_net of most observations sit around zero regardless of income levels. The graphs show that the capital_net is not very useful for classification. So it is taken out of the model dataset.
+
+### Hours per Week
+```{r, Hours per week}
+hpw_hist <- income_data %>% ggplot(aes(x = hours.per.week)) + geom_histogram(bins = 25, fill = "red") + 
+  labs(x = "Hours per week", y= "Frequency", title = "Hours per week Histogram")
+print(hpw_hist)
+hpw_income_density <- ggplot(income_data, aes(x = hours.per.week, fill = income)) +
+  geom_density(alpha = 0.2) + labs(x = "Hours per week",y = "Density",title = "Hours-per-week Density Plot by Income Level")
+print (hpw_income_density)
+```
+
+Greater hours per week may result in a higher possibility of high income.
+
+### Native Country
+```{r, Native country}
+native_income_proportion <- ggplot(income_data, aes(x = native.country, fill = income)) +
+  geom_bar(alpha = 0.2) + labs(x = "Native Country",y = "Observations",title = "Proportions of >50K in different work classes")+theme(axis.text.x = element_text(angle = 90, hjust = 1))
+print (native_income_proportion)
+native_income_proportion1 <- ggplot(income_data, aes(x = native.country, fill = income)) +
+geom_bar(alpha = 0.2) + labs(x = "Native Country",y = "Observations",title = "Proportions of >50K in different work classes")+theme(axis.text.x = element_text(angle = 90, hjust = 1)) + ylim(0,650) #To set y axis limit to see other native countries clearly
+print (native_income_proportion1) 
+```
+
+Most people are from US according to the 1st graph. People from Mexico are the second largest population in the dataset.  The 2nd graph is zoomed in graph of the 1st one indicating that most of people from Mexico are making salaries less than 50K per year.
+
+### Final Dataset Used for Models
+```{r, Final Dataset}
+head(income_data)
+set.seed(1000, sample.kind='Rejection')
+test_index <- createDataPartition(y = income_data$income, times = 1, p = 0.1, list = FALSE)
+trainset <- income_data[-test_index,]
+testset <- income_data[test_index,]
+```
+
+The final dataset is split into the trainset training dataset and the testset testing dataset using function createDataPartition. Testset is 10% of final dataset.
+
+# Models and Results
+
+## Decision Tree
+
+The accuracy of decision tree is below:
+```{r, Decision Tree}
+library(rpart)
+treeFit <- rpart(income ~. , data=trainset)
+prediction2 <- predict(treeFit, newdata=testset, type='class')
+acu2<-confusionMatrix(prediction2,testset$income)$overall[1]
+acu2
+```
+
+## Random Forest
+
+The accuracy of random forest is below:
+```{r, Random Forest}
+library(randomForest)
+rfFit<- randomForest(income~.,data= trainset)
+print(rfFit)
+prediction1 <- predict(rfFit, newdata=testset, type='class')
+acu1<-confusionMatrix(prediction1,testset$income)$overall[1]
+acu1
+```
+Random forest is a better model for the dataset considering quite a few features used for prediction.     
+Below codes are not run in my computer due to very slow response. A better accuracy can be achieved by tuning parameters.
+
+grid <- data.frame(mtry = c(1, 5, 10, 25, 50, 100))  
+control <- trainControl(method="cv", number = 5)  
+train_rf <- train(income ~ ., data = income_data,  
+                  method = "rf",  
+                 ntree = 150,  
+                 trControl = control,  
+               tuneGrid = grid,  
+                  nSamp = 5000)  
+ggplot(train_rf)  
+train_rf$bestTune  
+
+
+
+# Conclusions 
+Random forests are a very strong machine learning approach for categorical prediction with many features. The initial random forest model can achieve an accuracy of 0.83. Further parameter tuning work can be done in provided codes to improve accuracy.But computation time of random forest is very long. Thus some future work need to be done to optimize codes for tuning parameters of random forest and thus reduce computation time significantly.  
+
