@@ -38,7 +38,7 @@ In this report, the **Adult** was used to create a **Income Prediction Algorithm
 
 The **Adult dataset** consists of 32561 observations with 15 variables. 
 
-The data was pulled directly from the kaggle website (https://www.kaggle.com/uciml/adult-census-income). The data can't be automatically downloaded unless a registration with the website is finished. Thus, the dataset will be uploaded with this report.
+The data was pulled directly from the kaggle website (https://www.kaggle.com/uciml/adult-census-income). The data can't be automatically downloaded unless a registration with the website is finished. Thus, the dataset will be uploaded with this report in https://github.com/l98033110/Havardx-Capstone.
 
 The raw dataset was explored, cleaned up, wrangled to become a more useable subset and then split into trainset dataset and the testset dataset.
 
@@ -53,7 +53,7 @@ Using this method, an **Accuracy** of **0.83** was obtained. In the last part of
 ## Read Data
 The raw datasets were pulled directly from the kaggle website and saved to a file called income_data.
 ```{r,Adult Census Income from kaggle Website. Downloaded data called adult.csv will be submitted}
-income_data <- read.csv('adult.csv') # read provided dataset.
+income_data <- read.csv('adult.csv') # read provided dataset from https://github.com/l98033110/Havardx-Capstone
 ```
 
 ##### _Adult_ Dataset

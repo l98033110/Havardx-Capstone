@@ -14,7 +14,7 @@ library(dplyr)
 
 
 ##### Pull Adult Census Income from kaggle Website. Downloaded data called adult.csv will be submitted ####
-income_data <- read.csv('adult.csv') # read provided dataset.
+income_data <- read.csv('adult.csv') # read provided dataset from https://github.com/l98033110/Havardx-Capstone
 str(income_data)
 income_data <- distinct(income_data) # remove duplicate rows
 
